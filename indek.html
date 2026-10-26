@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Petualangan Mario: Misi Perkalian (AR Motion Gesture)</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- MediaPipe Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Fredoka', cursive, sans-serif;
+            user-select: none;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+        }
+        canvas {
+            touch-action: none;
+        }
+        .pixel-corners {
+            box-shadow: 0 8px 0 rgba(0,0,0,0.3);
+        }
+        .custom-glass {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+    </style>
+</head>
+<body class="h-screen w-screen overflow-hidden flex flex-col items-center justify-center p-2 sm:p-4 text-white">
+
+    <!-- Game Container -->
+    <div id="game-app" class="relative w-full max-w-5xl h-full max-h-[720px] bg-slate-900 rounded-3xl overflow-hidden shadow-2xl border-4 border-yellow-400 flex flex-col">
+        
+        <!-- Header / HUD -->
+        <header id="hud" class="hidden flex-none bg-gradient-to-r from-red-600 via-yellow-500 to-green-600 p-3 flex justify-between items-center text-xl font-bold border-b-4 border-yellow-300 z-10">
+            <div class="flex items-center gap-4">
+                <div class="flex items-center gap-1 bg-black/40 px-3 py-1 rounded-full border border-white/30">
+                    <span>❤️ Nyawa:</span>
+                    <span id="hud-lives" class="text-red-400 text-2xl">3</span>
+                </div>
+                <div class="flex items-center gap-1 bg-black/40 px-3 py-1 rounded-full border border-white/30">
+                    <span>⭐ Skor:</span>
+                    <span id="hud-score" class="text-yellow-300">0</span>
+                </div>
+            </div>
+            
+            <div class="bg-black/40 px-4 py-1 rounded-full border border-white/30 text-center">
+                <span class="text-sm block text-yellow-200 uppercase font-semibold">Tingkat / Soal</span>
+                <span id="hud-level" class="text-lg">Level 1 / 10</span>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <button id="btn-toggle-cam" class="bg-blue-600 hover:bg-blue-700 text-xs px-3 py-2 rounded-xl border border-white/40 transition">
+                    📷 Kamera: ON
+                </button>
+                <button id="btn-audio" class="bg-purple-600 hover:bg-purple-700 text-xs px-3 py-2 rounded-xl border border-white/40 transition">
+                    🔊 Suara: ON
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Display Area (Canvas + Camera Overlay) -->
+        <div class="relative flex-1 w-full bg-sky-300 overflow-hidden">
+            <!-- Game Canvas -->
+            <canvas id="gameCanvas" class="w-full h-full block"></canvas>
+
+            <!-- Video Input element for MediaPipe (Hidden visually, rendered inside mini PIP) -->
+            <video id="webcam" class="hidden" playsinline></video>
+
+            <!-- Mini PIP Webcam Overlay -->
+            <div id="cam-pip-container" class="absolute bottom-4 right-4 w-44 h-32 bg-black/70 rounded-2xl border-2 border-yellow-400 overflow-hidden shadow-lg flex flex-col items-center justify-center transition-all duration-300">
+                <canvas id="camCanvas" class="w-full h-full object-cover transform -scale-x-100"></canvas>
+                <div id="cam-status" class="absolute top-1 left-1 bg-red-600/80 text-[10px] px-2 py-0.5 rounded-full">
+                    Kamera Nyala
+                </div>
+                <!-- Hand Cursor Pointer Indicator -->
+                <div id="gesture-indicator" class="absolute bottom-1 right-1 text-[10px] bg-black/60 px-1.5 py-0.5 rounded text-yellow-300">
+                    Sistem AR Aktif
+                </div>
+            </div>
+
+            <!-- Modal Overlays -->
+
+            <!-- Start / Welcome Screen -->
+            <div id="screen-start" class="absolute inset-0 bg-black/75 flex flex-col items-center justify-center p-6 text-center z-20 backdrop-blur-md">
+                <div class="max-w-xl w-full bg-gradient-to-b from-red-500 via-red-600 to-red-800 p-6 rounded-3xl border-4 border-yellow-400 shadow-2xl flex flex-col items-center">
+                    <div class="text-4xl sm:text-5xl font-extrabold text-yellow-300 drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)] mb-2">
+                        PETUALANGAN RIO!
+                    </div>
+                    <div class="text-lg text-white font-semibold mb-6 bg-black/40 px-4 py-1 rounded-full border border-yellow-400/50">
+                        🎯 Misi Perkalian Matematika Kelas 4 SD
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-left text-sm mb-6 w-full">
+                        <div class="bg-black/30 p-4 rounded-2xl border border-white/20">
+                            <h4 class="font-bold text-yellow-300 text-base mb-1 flex items-center gap-1">📷 AR Motion Gesture:</h4>
+                            <ul class="list-disc list-inside space-y-1 text-gray-200">
+                                <li>Geser Tubuh/Tangan Kiri-Kanan untuk Jalan</li>
+                                <li>Angkat 2 Tangan ke Atas untuk Lompat</li>
+                                <li>Arahkan Tangan (Hover) ke Blok Pilihan Jawaban</li>
+                            </ul>
+                        </div>
+                        <div class="bg-black/30 p-4 rounded-2xl border border-white/20">
+                            <h4 class="font-bold text-yellow-300 text-base mb-1 flex items-center gap-1">⌨️ Kontrol Tombol:</h4>
+                            <ul class="list-disc list-inside space-y-1 text-gray-200">
+                                <li>Panah Kiri/Kanan / [A][D] = Berjalan</li>
+                                <li>Panah Atas / [W] / Spasi = Melompat</li>
+                                <li>Klik Mouse / Tombol [1][2][3] = Pilih Jawaban</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-col sm:flex-row gap-4 w-full justify-center">
+                        <button id="btn-start-ar" class="flex-1 bg-yellow-400 hover:bg-yellow-300 text-red-900 font-extrabold text-xl py-4 px-6 rounded-2xl border-4 border-yellow-200 shadow-lg transform hover:scale-105 active:scale-95 transition">
+                            🎥 MAIN DENGAN KAMERA (AR)
+                        </button>
+                        <button id="btn-start-no-ar" class="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-extrabold text-xl py-4 px-6 rounded-2xl border-4 border-blue-300 shadow-lg transform hover:scale-105 active:scale-95 transition">
+                            ⌨️ MAIN TANPA KAMERA
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Hint / Explanation Modal (When Wrong Answer Selected) -->
+            <div id="modal-hint" class="hidden absolute inset-0 bg-black/80 flex items-center justify-center p-4 z-30 backdrop-blur-sm">
+                <div class="max-w-md w-full bg-slate-800 border-4 border-red-500 rounded-3xl p-6 text-center shadow-2xl">
+                    <div class="text-3xl mb-2">❌ Waduh, Kurang Tepat!</div>
+                    <div class="text-yellow-400 font-bold text-lg mb-3">Petunjuk Langkah Pembelajaran:</div>
+                    
+                    <div id="hint-content" class="bg-slate-900 p-4 rounded-xl text-left font-mono text-sm text-green-300 border border-slate-700 mb-6 leading-relaxed">
+                        <!-- Filled dynamically -->
+                    </div>
+
+                    <button id="btn-close-hint" class="w-full bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-xl border-2 border-green-300 text-lg transition">
+                        💡 Saya Mengerti, Coba Lagi!
+                    </button>
+                </div>
+            </div>
+
+            <!-- Game Over Screen -->
+            <div id="screen-gameover" class="hidden absolute inset-0 bg-black/90 flex flex-col items-center justify-center p-6 z-40 backdrop-blur-md">
+                <div class="text-6xl font-black text-red-500 mb-2 drop-shadow-[0_4px_4px_rgba(0,0,0,0.9)]">GAME OVER</div>
+                <p class="text-xl text-gray-300 mb-6">Jangan menyerah! Ayo latih kembali kemampuan perkalianmu!</p>
+                <button id="btn-restart-gameover" class="bg-yellow-400 hover:bg-yellow-300 text-slate-900 font-extrabold text-2xl py-4 px-8 rounded-2xl border-4 border-yellow-200 shadow-xl transform hover:scale-105 transition">
+                    🔄 MAIN ULANG
+                </button>
+            </div>
+
+            <!-- Victory Screen -->
+            <div id="screen-victory" class="hidden absolute inset-0 bg-black/90 flex flex-col items-center justify-center p-6 z-40 backdrop-blur-md">
+                <div class="max-w-lg w-full bg-gradient-to-b from-yellow-500 via-amber-600 to-yellow-700 p-8 rounded-3xl border-4 border-white text-center shadow-2xl">
+                    <div class="text-5xl font-black text-white drop-shadow-md mb-2">🎉 HEBAT SEKALI! 🎉</div>
+                    <div class="text-xl text-yellow-100 font-bold mb-6">Misi Perkalian Berhasil Diselesaikan!</div>
+
+                    <div class="bg-black/40 rounded-2xl p-4 mb-6 text-left space-y-2 text-lg">
+                        <div class="flex justify-between">
+                            <span>Total Skor:</span>
+                            <span id="victory-score" class="font-bold text-yellow-300">0</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Bintang Kelulusan:</span>
+                            <span id="victory-stars" class="font-bold text-yellow-300">⭐⭐⭐</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Status:</span>
+                            <span class="font-bold text-green-400">Master Perkalian Phase B</span>
+                        </div>
+                    </div>
+
+                    <button id="btn-restart-victory" class="w-full bg-green-500 hover:bg-green-400 text-white font-black text-2xl py-4 px-8 rounded-2xl border-4 border-green-200 shadow-xl transform hover:scale-105 transition">
+                        🎮 MAIN AGAIN / ULANG
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Application Code JS Script -->
+    <script>
+        /**
+         * PETUALANGAN MARIO: MISI PERKALIAN - GAME ENGINE & AR GESTURE SYSTEM
+         * Developed with HTML5 Canvas API & MediaPipe AI Tracking
+         */
+
+        // --- 1. Sound Synthesizer (Web Audio API) ---
+        class SoundFX {
+            constructor() {
+                this.ctx = null;
+                this.muted = false;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            }
+
+            playJump() {
+                if (this.muted || !this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(400, this.ctx.currentTime + 0.15);
+                gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.15);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.15);
+            }
+
+            playCoin() {
+                if (this.muted || !this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(987.77, this.ctx.currentTime); // B5
+                osc.frequency.setValueAtTime(1318.51, this.ctx.currentTime + 0.08); // E6
+                gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.3);
+            }
+
+            playCorrect() {
+                if (this.muted || !this.ctx) return;
+                const now = this.ctx.currentTime;
+                [523.25, 659.25, 783.99, 1046.50].forEach((freq, index) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.frequency.value = freq;
+                    gain.gain.setValueAtTime(0.15, now + index * 0.08);
+                    gain.gain.linearRampToValueAtTime(0.01, now + index * 0.08 + 0.15);
+                    osc.start(now + index * 0.08);
+                    osc.stop(now + index * 0.08 + 0.15);
+                });
+            }
+
+            playWrong() {
+                if (this.muted || !this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(180, this.ctx.currentTime);
+                osc.frequency.linearRampToValueAtTime(90, this.ctx.currentTime + 0.3);
+                gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.3);
+            }
+        }
+
+        const audio = new SoundFX();
+
+        // --- 2. 10 Multiplication Questions Data ---
+        const mathQuestions = [
+            { q: "12 × 3", ans: 36, options: [36, 32, 39], hint: "12 × 3 = (10 × 3) + (2 × 3) = 30 + 6 = 36" },
+            { q: "15 × 4", ans: 60, options: [55, 60, 65], hint: "15 × 4 = (10 × 4) + (5 × 4) = 40 + 20 = 60" },
+            { q: "14 × 6", ans: 84, options: [74, 84, 94], hint: "14 × 6 = (10 × 6) + (4 × 6) = 60 + 24 = 84" },
+            { q: "23 × 3", ans: 69, options: [69, 66, 72], hint: "23 × 3 = (20 × 3) + (3 × 3) = 60 + 9 = 69" },
+            { q: "18 × 5", ans: 90, options: [85, 90, 95], hint: "18 × 5 = (10 × 5) + (8 × 5) = 50 + 40 = 90" },
+            { q: "32 × 4", ans: 128, options: [124, 128, 132], hint: "32 × 4 = (30 × 4) + (2 × 4) = 120 + 8 = 128" },
+            { q: "25 × 6", ans: 150, options: [140, 150, 160], hint: "25 × 6 = (20 × 6) + (5 × 6) = 120 + 30 = 150" },
+            { q: "41 × 5", ans: 205, options: [205, 200, 215], hint: "41 × 5 = (40 × 5) + (1 × 5) = 200 + 5 = 205" },
+            { q: "53 × 3", ans: 159, options: [156, 159, 162], hint: "53 × 3 = (50 × 3) + (3 × 3) = 150 + 9 = 159" },
+            { q: "64 × 4", ans: 256, options: [246, 256, 266], hint: "64 × 4 = (60 × 4) + (4 × 4) = 240 + 16 = 256" }
+        ];
+
+        // --- 3. Game State Core ---
+        const gameState = {
+            currentLevel: 0,
+            score: 0,
+            lives: 3,
+            isPlaying: false,
+            arEnabled: false,
+            handCursor: { x: -100, y: -100, active: false, hoverBlock: null, hoverTimer: 0 },
+            keys: { left: false, right: false, up: false }
+        };
+
+        // --- 4. Game Entities ---
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        function resizeCanvas() {
+            canvas.width = canvas.parentElement.clientWidth;
+            canvas.height = canvas.parentElement.clientHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Mario Character Hero Object
+        const hero = {
+            x: 80,
+            y: 0,
+            width: 44,
+            height: 56,
+            vx: 0,
+            vy: 0,
+            speed: 6,
+            jumpStrength: -14,
+            gravity: 0.65,
+            grounded: false,
+            facingRight: true,
+            frame: 0,
+            animTimer: 0,
+
+            resetPosition() {
+                this.x = 80;
+                this.y = canvas.height - 180;
+                this.vx = 0;
+                this.vy = 0;
+            },
+
+            update() {
+                // Apply horizontal keyboard/gesture physics
+                if (gameState.keys.left) {
+                    this.vx = -this.speed;
+                    this.facingRight = false;
+                } else if (gameState.keys.right) {
+                    this.vx = this.speed;
+                    this.facingRight = true;
+                } else {
+                    this.vx *= 0.8; // friction
+                }
+
+                if (gameState.keys.up && this.grounded) {
+                    this.vy = this.jumpStrength;
+                    this.grounded = false;
+                    audio.playJump();
+                }
+
+                // Gravity physics
+                this.vy += this.gravity;
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Screen Horizontal Boundary Constraints
+                if (this.x < 10) this.x = 10;
+                if (this.x + this.width > canvas.width - 10) this.x = canvas.width - this.width - 10;
+
+                // Ground Collision Floor
+                const groundLevel = canvas.height - 120;
+                if (this.y + this.height >= groundLevel) {
+                    this.y = groundLevel - this.height;
+                    this.vy = 0;
+                    this.grounded = true;
+                }
+
+                // Simple walk frame animation state
+                if (Math.abs(this.vx) > 0.5) {
+                    this.animTimer++;
+                    if (this.animTimer % 8 === 0) {
+                        this.frame = (this.frame + 1) % 2;
+                    }
+                } else {
+                    this.frame = 0;
+                }
+            },
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
+                if (!this.facingRight) ctx.scale(-1, 1);
+
+                // Original Platformer Hero Character Sprite Drawing (Mario Style)
+                // Red Cap
+                ctx.fillStyle = '#E52521';
+                ctx.beginPath();
+                ctx.roundRect(-16, -26, 32, 14, [6, 6, 2, 2]);
+                ctx.fill();
+                // Cap Brim
+                ctx.fillRect(-16, -14, 20, 4);
+
+                // Face / Head
+                ctx.fillStyle = '#FFCC99';
+                ctx.fillRect(-12, -12, 24, 16);
+                // Eyes
+                ctx.fillStyle = '#000000';
+                ctx.fillRect(4, -8, 4, 6);
+                // Mustache
+                ctx.fillStyle = '#4A2E00';
+                ctx.fillRect(-4, -1, 18, 5);
+
+                // Blue Overalls / Body
+                ctx.fillStyle = '#00247D';
+                ctx.fillRect(-12, 4, 24, 18);
+
+                // Red Shirt Sleeves
+                ctx.fillStyle = '#E52521';
+                ctx.fillRect(-16, 4, 6, 12);
+                ctx.fillRect(10, 4, 6, 12);
+
+                // Yellow Buttons
+                ctx.fillStyle = '#FCD116';
+                ctx.fillRect(-6, 8, 3, 3);
+                ctx.fillRect(3, 8, 3, 3);
+
+                // Shoes / Feet Animation
+                ctx.fillStyle = '#663300';
+                const footOffset = (this.frame === 1) ? 4 : 0;
+                ctx.fillRect(-14 + footOffset, 22, 12, 6);
+                ctx.fillRect(2 - footOffset, 22, 12, 6);
+
+                ctx.restore();
+            }
+        };
+
+        // Option Question Blocks Class
+        class AnswerBlock {
+            constructor(index, text, isCorrect, x, y) {
+                this.index = index;
+                this.text = text.toString();
+                this.isCorrect = isCorrect;
+                this.x = x;
+                this.y = y;
+                this.width = 110;
+                this.height = 75;
+                this.bounceY = 0;
+                this.hoverProgress = 0;
+            }
+
+            draw() {
+                ctx.save();
+                const drawY = this.y + this.bounceY;
+
+                // Glowing Effect if AR Cursor hovering
+                if (gameState.handCursor.hoverBlock === this) {
+                    ctx.shadowColor = '#FACC15';
+                    ctx.shadowBlur = 20;
+                }
+
+                // Question Block Background (Yellow Gradient)
+                const grad = ctx.createLinearGradient(this.x, drawY, this.x, drawY + this.height);
+                grad.addColorStop(0, '#FACC15');
+                grad.addColorStop(1, '#CA8A04');
+                ctx.fillStyle = grad;
+                ctx.strokeStyle = '#FFFFFF';
+                ctx.lineWidth = 3;
+
+                ctx.beginPath();
+                ctx.roundRect(this.x, drawY, this.width, this.height, 12);
+                ctx.fill();
+                ctx.stroke();
+
+                // Corner Rivets/Dots
+                ctx.fillStyle = '#854D0E';
+                ctx.fillRect(this.x + 6, drawY + 6, 4, 4);
+                ctx.fillRect(this.x + this.width - 10, drawY + 6, 4, 4);
+                ctx.fillRect(this.x + 6, drawY + this.height - 10, 4, 4);
+                ctx.fillRect(this.x + this.width - 10, drawY + this.height - 10, 4, 4);
+
+                // Label Option (A, B, C)
+                const labels = ["A", "B", "C"];
+                ctx.fillStyle = '#78350F';
+                ctx.font = 'bold 14px Fredoka';
+                ctx.fillText(`[${labels[this.index]}]`, this.x + 8, drawY + 20);
+
+                // Answer Value Text
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = 'bold 28px Fredoka';
+                ctx.textAlign = 'center';
+                ctx.shadowColor = 'rgba(0,0,0,0.5)';
+                ctx.shadowBlur = 4;
+                ctx.fillText(this.text, this.x + this.width / 2, drawY + 52);
+
+                // Progress Hover Ring for AR Selection Gesture
+                if (this.hoverProgress > 0) {
+                    ctx.beginPath();
+                    ctx.arc(this.x + this.width / 2, drawY + this.height / 2, 35, 0, (Math.PI * 2) * (this.hoverProgress / 100));
+                    ctx.lineWidth = 6;
+                    ctx.strokeStyle = '#22C55E';
+                    ctx.stroke();
+                }
+
+                ctx.restore();
+            }
+
+            isHitByHero() {
+                // Detection if Mario jumps into block from underneath
+                return (
+                    hero.x + hero.width > this.x &&
+                    hero.x < this.x + this.width &&
+                    hero.y <= this.y + this.height &&
+                    hero.y + hero.height >= this.y &&
+                    hero.vy < 0
+                );
+            }
+        }
+
+        let currentBlocks = [];
+
+        function setupLevel(levelIdx) {
+            const data = mathQuestions[levelIdx];
+            document.getElementById('hud-level').innerText = `Level ${levelIdx + 1} / 10`;
+            hero.resetPosition();
+
+            // Spawn 3 Answer Blocks horizontally spaced out
+            const startX = (canvas.width - (3 * 110 + 2 * 40)) / 2;
+            currentBlocks = data.options.map((opt, i) => {
+                return new AnswerBlock(
+                    i,
+                    opt,
+                    opt === data.ans,
+                    startX + i * (110 + 40),
+                    canvas.height - 290
+                );
+            });
+        }
+
+        // --- 5. Render Scene Graphics ---
+        function renderScene() {
+            // Sky Background
+            ctx.fillStyle = '#60A5FA';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Fluffy Clouds
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+            ctx.beginPath();
+            ctx.arc(150, 100, 30, 0, Math.PI * 2);
+            ctx.arc(180, 90, 40, 0, Math.PI * 2);
+            ctx.arc(210, 100, 30, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(canvas.width - 200, 120, 35, 0, Math.PI * 2);
+            ctx.arc(canvas.width - 160, 110, 45, 0, Math.PI * 2);
+            ctx.arc(canvas.width - 120, 120, 35, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Background Hills
+            ctx.fillStyle = '#16A34A';
+            ctx.beginPath();
+            ctx.ellipse(200, canvas.height - 100, 180, 90, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(canvas.width - 250, canvas.height - 90, 220, 110, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Ground Floor (Brick Grass Pattern)
+            const groundY = canvas.height - 120;
+            ctx.fillStyle = '#15803D'; // Top Grass Line
+            ctx.fillRect(0, groundY, canvas.width, 24);
+
+            ctx.fillStyle = '#B45309'; // Dirt Floor
+            ctx.fillRect(0, groundY + 24, canvas.width, canvas.height - groundY - 24);
+
+            // Dirt Brick Details
+            ctx.strokeStyle = '#78350F';
+            ctx.lineWidth = 2;
+            for (let y = groundY + 24; y < canvas.height; y += 24) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+
+            // Draw Pipes Decor
+            drawPipe(40, groundY - 60, 50, 60);
+            drawPipe(canvas.width - 90, groundY - 80, 50, 80);
+
+            // Floating Math Question Banner Top Center
+            const qData = mathQuestions[gameState.currentLevel];
+            ctx.save();
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+            ctx.strokeStyle = '#FACC15';
+            ctx.lineWidth = 4;
+            const bannerW = 340;
+            const bannerH = 70;
+            const bannerX = (canvas.width - bannerW) / 2;
+            ctx.beginPath();
+            ctx.roundRect(bannerX, 20, bannerW, bannerH, 20);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#FACC15';
+            ctx.font = 'bold 16px Fredoka';
+            ctx.textAlign = 'center';
+            ctx.fillText("SOAL PERKALIAN:", canvas.width / 2, 42);
+
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = 'bold 32px Fredoka';
+            ctx.fillText(`${qData.q} = ?`, canvas.width / 2, 74);
+            ctx.restore();
+
+            // Draw Finish Flag on Stage 10
+            if (gameState.currentLevel === 9) {
+                drawFlagpole(canvas.width - 160, groundY - 180);
+            }
+
+            // Draw Answer Blocks
+            currentBlocks.forEach(block => block.draw());
+
+            // Draw Hero
+            hero.draw();
+
+            // Draw AR Hand Cursor Pointer (if active)
+            if (gameState.arEnabled && gameState.handCursor.active) {
+                ctx.save();
+                ctx.fillStyle = '#EF4444';
+                ctx.strokeStyle = '#FFFFFF';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(gameState.handCursor.x, gameState.handCursor.y, 14, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+
+                // Hand cursor label
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = 'bold 12px Fredoka';
+                ctx.textAlign = 'center';
+                ctx.fillText('✋ Tangan', gameState.handCursor.x, gameState.handCursor.y - 20);
+                ctx.restore();
+            }
+        }
+
+        function drawPipe(x, y, w, h) {
+            ctx.save();
+            ctx.fillStyle = '#16A34A';
+            ctx.strokeStyle = '#14532D';
+            ctx.lineWidth = 3;
+            // Rim
+            ctx.fillRect(x - 5, y, w + 10, 20);
+            ctx.strokeRect(x - 5, y, w + 10, 20);
+            // Body
+            ctx.fillRect(x, y + 20, w, h - 20);
+            ctx.strokeRect(x, y + 20, w, h - 20);
+            ctx.restore();
+        }
+
+        function drawFlagpole(x, y) {
+            ctx.save();
+            ctx.fillStyle = '#CBD5E1';
+            ctx.fillRect(x, y, 8, 180);
+            ctx.fillStyle = '#FACC15';
+            ctx.beginPath();
+            ctx.arc(x + 4, y, 12, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Green Flag
+            ctx.fillStyle = '#22C55E';
+            ctx.beginPath();
+            ctx.moveTo(x + 8, y + 10);
+            ctx.lineTo(x + 60, y + 30);
+            ctx.lineTo(x + 8, y + 50);
+            ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        }
+
+        // --- 6. Main Game Loop ---
+        function gameLoop() {
+            if (gameState.isPlaying) {
+                hero.update();
+
+                // Check collisions between Mario and Answer Blocks
+                currentBlocks.forEach(block => {
+                    if (block.isHitByHero()) {
+                        processAnswer(block);
+                    }
+                });
+
+                // Check AR Hand Hover Selection Logic
+                if (gameState.arEnabled && gameState.handCursor.active) {
+                    let hovered = null;
+                    currentBlocks.forEach(block => {
+                        if (
+                            gameState.handCursor.x >= block.x &&
+                            gameState.handCursor.x <= block.x + block.width &&
+                            gameState.handCursor.y >= block.y &&
+                            gameState.handCursor.y <= block.y + block.height
+                        ) {
+                            hovered = block;
+                        }
+                    });
+
+                    if (hovered) {
+                        if (gameState.handCursor.hoverBlock === hovered) {
+                            hovered.hoverProgress += 4; // Progress speed
+                            if (hovered.hoverProgress >= 100) {
+                                processAnswer(hovered);
+                                hovered.hoverProgress = 0;
+                            }
+                        } else {
+                            gameState.handCursor.hoverBlock = hovered;
+                            hovered.hoverProgress = 0;
+                        }
+                    } else {
+                        if (gameState.handCursor.hoverBlock) {
+                            gameState.handCursor.hoverBlock.hoverProgress = 0;
+                            gameState.handCursor.hoverBlock = null;
+                        }
+                    }
+                }
+
+                renderScene();
+            }
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- 7. Answer Processing & Progression Logic ---
+        function processAnswer(block) {
+            if (!gameState.isPlaying) return;
+
+            if (block.isCorrect) {
+                // Correct Answer
+                audio.playCoin();
+                audio.playCorrect();
+                gameState.score += 100;
+                document.getElementById('hud-score').innerText = gameState.score;
+
+                if (gameState.currentLevel < mathQuestions.length - 1) {
+                    gameState.currentLevel++;
+                    setupLevel(gameState.currentLevel);
+                } else {
+                    // Win Game
+                    showVictoryScreen();
+                }
+            } else {
+                // Wrong Answer
+                audio.playWrong();
+                gameState.lives--;
+                document.getElementById('hud-lives').innerText = gameState.lives;
+
+                if (gameState.lives <= 0) {
+                    showGameOverScreen();
+                } else {
+                    showHintModal(mathQuestions[gameState.currentLevel]);
+                }
+            }
+        }
+
+        function showHintModal(qData) {
+            gameState.isPlaying = false;
+            document.getElementById('hint-content').innerText = qData.hint;
+            document.getElementById('modal-hint').classList.remove('hidden');
+        }
+
+        function showGameOverScreen() {
+            gameState.isPlaying = false;
+            document.getElementById('screen-gameover').classList.remove('hidden');
+        }
+
+        function showVictoryScreen() {
+            gameState.isPlaying = false;
+            document.getElementById('victory-score').innerText = gameState.score;
+            document.getElementById('screen-victory').classList.remove('hidden');
+        }
+
+        // --- 8. Event & Controls Handling ---
+        // Keyboard Support
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') gameState.keys.left = true;
+            if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') gameState.keys.right = true;
+            if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W' || e.key === ' ') gameState.keys.up = true;
+
+            // Direct keyboard options 1, 2, 3 selection
+            if (['1', '2', '3'].includes(e.key) && gameState.isPlaying) {
+                const idx = parseInt(e.key) - 1;
+                if (currentBlocks[idx]) processAnswer(currentBlocks[idx]);
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') gameState.keys.left = false;
+            if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') gameState.keys.right = false;
+            if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W' || e.key === ' ') gameState.keys.up = false;
+        });
+
+        // Mouse Click Direct Interaction
+        canvas.addEventListener('click', (e) => {
+            if (!gameState.isPlaying) return;
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            currentBlocks.forEach(block => {
+                if (
+                    mouseX >= block.x && mouseX <= block.x + block.width &&
+                    mouseY >= block.y && mouseY <= block.y + block.height
+                ) {
+                    processAnswer(block);
+                }
+            });
+        });
+
+        // Button Controls Initialization
+        document.getElementById('btn-start-ar').addEventListener('click', () => {
+            audio.init();
+            startApp(true);
+        });
+
+        document.getElementById('btn-start-no-ar').addEventListener('click', () => {
+            audio.init();
+            startApp(false);
+        });
+
+        document.getElementById('btn-close-hint').addEventListener('click', () => {
+            document.getElementById('modal-hint').classList.add('hidden');
+            hero.resetPosition();
+            gameState.isPlaying = true;
+        });
+
+        document.getElementById('btn-restart-gameover').addEventListener('click', resetAndRestart);
+        document.getElementById('btn-restart-victory').addEventListener('click', resetAndRestart);
+
+        document.getElementById('btn-audio').addEventListener('click', function() {
+            audio.muted = !audio.muted;
+            this.innerText = audio.muted ? '🔇 Suara: OFF' : '🔊 Suara: ON';
+        });
+
+        document.getElementById('btn-toggle-cam').addEventListener('click', function() {
+            const pip = document.getElementById('cam-pip-container');
+            if (pip.classList.contains('hidden')) {
+                pip.classList.remove('hidden');
+                this.innerText = '📷 Kamera: ON';
+            } else {
+                pip.classList.add('hidden');
+                this.innerText = '📷 Kamera: OFF';
+            }
+        });
+
+        function resetAndRestart() {
+            gameState.score = 0;
+            gameState.lives = 3;
+            gameState.currentLevel = 0;
+            document.getElementById('hud-score').innerText = '0';
+            document.getElementById('hud-lives').innerText = '3';
+            document.getElementById('screen-gameover').classList.add('hidden');
+            document.getElementById('screen-victory').classList.add('hidden');
+            setupLevel(0);
+            gameState.isPlaying = true;
+        }
+
+        function startApp(useAR) {
+            document.getElementById('screen-start').classList.add('hidden');
+            document.getElementById('hud').classList.remove('hidden');
+            gameState.arEnabled = useAR;
+            gameState.isPlaying = true;
+            setupLevel(0);
+
+            if (useAR) {
+                initMediaPipeTracking();
+            } else {
+                document.getElementById('cam-pip-container').classList.add('hidden');
+            }
+        }
+
+        // --- 9. AR MediaPipe Motion Gesture Tracking System ---
+        function initMediaPipeTracking() {
+            const videoElement = document.getElementById('webcam');
+            const camCanvas = document.getElementById('camCanvas');
+            const camCtx = camCanvas.getContext('2d');
+
+            // Initialize Hands Detection
+            const hands = new Hands({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+            });
+
+            hands.setOptions({
+                maxNumHands: 2,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.6,
+                minTrackingConfidence: 0.6
+            });
+
+            // Initialize Pose Detection for Jump & Body Movement
+            const pose = new Pose({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+            });
+
+            pose.setOptions({
+                modelComplexity: 1,
+                smoothLandmarks: true,
+                minDetectionConfidence: 0.6,
+                minTrackingConfidence: 0.6
+            });
+
+            // Handle Camera Video Stream & Rendering Results
+            hands.onResults((results) => {
+                camCanvas.width = videoElement.videoWidth || 320;
+                camCanvas.height = videoElement.videoHeight || 240;
+                camCtx.save();
+                camCtx.clearRect(0, 0, camCanvas.width, camCanvas.height);
+                camCtx.drawImage(results.image, 0, 0, camCanvas.width, camCanvas.height);
+
+                if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                    const primaryHand = results.multiHandLandmarks[0];
+                    const indexTip = primaryHand[8]; // Index finger tip landmark
+
+                    // Mirror X coordinate for intuitive AR control
+                    const mirroredX = (1 - indexTip.x) * canvas.width;
+                    const mappedY = indexTip.y * canvas.height;
+
+                    gameState.handCursor.x = mirroredX;
+                    gameState.handCursor.y = mappedY;
+                    gameState.handCursor.active = true;
+
+                    // Draw hand point preview on mini webcam
+                    camCtx.fillStyle = '#FF0000';
+                    camCtx.beginPath();
+                    camCtx.arc(indexTip.x * camCanvas.width, indexTip.y * camCanvas.height, 6, 0, Math.PI * 2);
+                    camCtx.fill();
+                } else {
+                    gameState.handCursor.active = false;
+                }
+                camCtx.restore();
+            });
+
+            pose.onResults((results) => {
+                if (results.poseLandmarks) {
+                    const nose = results.poseLandmarks[0];
+                    const leftWrist = results.poseLandmarks[15];
+                    const rightWrist = results.poseLandmarks[16];
+
+                    // Body Left/Right Tilt Movement Gesture (Nose X Position)
+                    if (nose) {
+                        // Mirror X
+                        const noseX = 1 - nose.x;
+                        if (noseX < 0.4) {
+                            gameState.keys.left = true;
+                            gameState.keys.right = false;
+                        } else if (noseX > 0.6) {
+                            gameState.keys.right = true;
+                            gameState.keys.left = false;
+                        } else {
+                            gameState.keys.left = false;
+                            gameState.keys.right = false;
+                        }
+                    }
+
+                    // Both Hands Raised Jump Gesture
+                    if (leftWrist && rightWrist && nose) {
+                        if (leftWrist.y < nose.y && rightWrist.y < nose.y) {
+                            gameState.keys.up = true;
+                        } else {
+                            gameState.keys.up = false;
+                        }
+                    }
+                }
+            });
+
+            // Request Webcam Stream
+            const camera = new Camera(videoElement, {
+                onFrame: async () => {
+                    await hands.send({ image: videoElement });
+                    await pose.send({ image: videoElement });
+                },
+                width: 320,
+                height: 240
+            });
+
+            camera.start().catch((err) => {
+                console.warn("Kamera tidak diizinkan atau tidak tersedia:", err);
+                document.getElementById('cam-status').innerText = 'Kamera Matikan';
+                document.getElementById('cam-status').classList.replace('bg-red-600/80', 'bg-gray-600/80');
+            });
+        }
+
+        // Start Rendering Engine Loop
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
